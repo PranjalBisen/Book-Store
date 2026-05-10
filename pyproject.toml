@@ -1,13 +1,14 @@
 [project]
 name = "book-store"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "My Bookstore backend api"
+author = "Pranjal D. Bisen"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi[all]>=0.136.1",
     "passlib[bcrypt]>=1.7.4",
     "psycopg2-binary>=2.9.12",
+    "pybind11>=3.0.4",
     "python-jose[cryptography]>=3.5.0",
     "sqlalchemy>=2.0.49",
 ]

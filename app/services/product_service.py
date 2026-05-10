@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.models.product import Product
 from app.schemas.product import ProductCreate,ProductUpdate,StockUpdate
 from app.utils.normalization import normalize
+from app.services.search_service import sync_trie_insert,sync_trie_remove
 from fastapi import HTTPException
 
 
@@ -20,6 +21,7 @@ def create_product(db:Session,data:ProductCreate,admin_id:int)->Product:
     db.add(product)
     db.commit()
     db.refresh(product)
+    sync_trie_insert(product.product_name)
     return product
 
 def get_products(db:Session,limit:int=20,offset:int=0)->List[Product]:
@@ -37,6 +39,7 @@ def update_product(db:Session,product_id:int,data:ProductUpdate)->Optional[Produ
     if not product:
         return None
     
+    old_name=product.product_name
     update_data=data.model_dump(exclude_unset=True)
     if "product_name" in update_data and update_data["product_name"]:
         product.normalized_name=normalize(update_data["product_name"])
@@ -44,6 +47,9 @@ def update_product(db:Session,product_id:int,data:ProductUpdate)->Optional[Produ
         setattr(product,key,value)
     db.commit()
     db.refresh(product)
+    if product.product_name!=old_name:
+        sync_trie_remove(old_name)
+        sync_trie_insert(product.product_name)
     return product
 
 def delete_product(db:Session,product_id:int)->bool:
@@ -52,6 +58,7 @@ def delete_product(db:Session,product_id:int)->bool:
         return False
     product.is_active=False
     db.commit()
+    sync_trie_remove(product.product_name)
     return True
 
 def update_stock(db:Session,product_id:int,data:StockUpdate)->Optional[Product]:
