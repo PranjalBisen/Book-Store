@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from app.api.router import api_router
 from app.models.base import Base
 from app.db.session import engine
-
+import app.models 
 Base.metadata.create_all(bind=engine)
 
 app=FastAPI(

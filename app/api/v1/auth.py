@@ -1,36 +1,51 @@
-from fastapi import APIRouter,Depends,HTTPException,status
-from sqlalchemy.orm import Session
-from app.db.session import get_db
-from app.models.user import User
-from app.schemas.login import Login
-from app.core import security
+from fastapi import FastAPI, HTTPException
 
-router=APIRouter()
+from app.api import router
+from psycopg2 import connect, OperationalError
+from app.schemas.login import Login
+router.app.include_router(router.app)
+
+app = FastAPI(
+    title="Book Store API",
+    description="API for managing a book store",
+    version="1.0.0",
+)
 
 @router.post("/login")
-async def login(credentials:Login,db:Session=Depends(get_db)):
-    user=db.query(User).filter(User.username==credentials.username).first()
-    if not user or not security.verify_password(credentials.password,user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password"
+async def login(credentials: Login):
+    try:
+        db = connect(
+            dbname="bookstore",
+            user="user",
+            password="password",
+            host="localhost",
+            port="5432"
         )
-    access_token=security.create_access_token(subject=user.id)
-    return {"access_token":access_token,"token_type":"bearer"}
+        db.close()
+    except OperationalError:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    user_name = db.query(model.User).filter(model.User.username == credentials.username).first()
+    user_password = db.query(model.User).filter(model.User.password == credentials.password).first()
+    if not user_name or not user_password:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "Login successful", "user": user_name}
 
 @router.post("/register")
-async def register(credentials:Login,db:Session=Depends(get_db)):
-    user=db.query(User).filter(User.username==credentials.username).first()
-    if user:
-        raise HTTPException(
-            status_code=400,
-            detail="User already exists"
+async def register(credentials: Login):
+    try:
+        db = connect(
+            dbname="bookstore",
+            user="user",
+            password="password",
+            host="localhost",
+            port="5432"
         )
-    new_user=User(
-        username=credentials.username,
-        hashed_password=security.get_password_hash(credentials.password)
-    )
-    db.add(new_user)
+        db.close()
+    except OperationalError:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    user = db.query(model.User).filter(model.User.username == credentials.username).first()
+    if user:
+        raise HTTPException(status_code=404, detail="User already exists")
+    db.add(model.User(username=credentials.username, password=credentials.password))
     db.commit()
-    db.refresh(new_user)
-    return {"message":"User created successfully","username":new_user.username}
+    return {"message": "User registered successfully", "user": credentials.username}
