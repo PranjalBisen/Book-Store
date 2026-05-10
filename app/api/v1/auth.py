@@ -1,51 +1,36 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter,Depends,HTTPException,status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from app.db.session import get_db
+from app.schemas.auth import UserCreate,TokenResponse
+from app.models.user import User
+from app.services import auth_service
+from app.core.security import create_access_token
+from app.api.deps import get_current_active_user
 
-from app.api import router
-from psycopg2 import connect, OperationalError
-from app.schemas.login import Login
-router.app.include_router(router.app)
+router=APIRouter()
 
-app = FastAPI(
-    title="Book Store API",
-    description="API for managing a book store",
-    version="1.0.0",
-)
+@router.post("/register",response_model=dict)
+def register(user_in:UserCreate,db:Session=Depends(get_db)):
+    user=auth_service.register_user(db,user_in)
+    return {"message":"User created successfully","user_id":user.id}
 
-@router.post("/login")
-async def login(credentials: Login):
-    try:
-        db = connect(
-            dbname="bookstore",
-            user="user",
-            password="password",
-            host="localhost",
-            port="5432"
+@router.post("/login",response_model=TokenResponse)
+def login(form_data:OAuth2PasswordRequestForm=Depends(),db:Session=Depends(get_db)):
+    user=auth_service.authenticate_user(db,form_data.username,form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
         )
-        db.close()
-    except OperationalError:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    user_name = db.query(model.User).filter(model.User.username == credentials.username).first()
-    user_password = db.query(model.User).filter(model.User.password == credentials.password).first()
-    if not user_name or not user_password:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"message": "Login successful", "user": user_name}
+    access_token=create_access_token(subject=user.id)
+    return {"access_token":access_token,"token_type":"bearer"}
 
-@router.post("/register")
-async def register(credentials: Login):
-    try:
-        db = connect(
-            dbname="bookstore",
-            user="user",
-            password="password",
-            host="localhost",
-            port="5432"
-        )
-        db.close()
-    except OperationalError:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    user = db.query(model.User).filter(model.User.username == credentials.username).first()
-    if user:
-        raise HTTPException(status_code=404, detail="User already exists")
-    db.add(model.User(username=credentials.username, password=credentials.password))
-    db.commit()
-    return {"message": "User registered successfully", "user": credentials.username}
+@router.get("/me",response_model=dict)
+def read_users_me(current_user:User=Depends(get_current_active_user)):
+    return {
+        "id":current_user.id,
+        "name":current_user.name,
+        "email":current_user.email,
+        "role":current_user.role
+    }
